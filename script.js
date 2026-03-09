@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const dateInput = document.getElementById('dateInput');
     const scheduleInput = document.getElementById('scheduleInput');
     const middleBannerUpload = document.getElementById('middleBannerUpload');
-    const bottomBannerUpload = document.getElementById('bottomBannerUpload');
     const downloadBtn = document.getElementById('downloadBtn');
 
     // UI Elements for Dashboard
@@ -26,20 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Assets
     const assets = {
         banner: new Image(),
-        bottomBanner: new Image(),
         uploadedImg: null,
         uploadedMiddleBanner: null, // 커스텀 중단 배너용
         fontReady: false
     };
 
-    // 로컬의 기본 배너/슬로건 이미지 로드
+    // 로컬의 기본 배너 로드
     assets.banner.src = 'banner.png';
-    assets.bottomBanner.onerror = () => {
-        assets.bottomBanner.onerror = null;
-        assets.bottomBanner.src = '';
-        drawCanvas();
-    };
-    assets.bottomBanner.src = 'bottom_banner.png';
 
     // 폰트 로딩 후 초기화/복구 진행
     document.fonts.load('10pt "CardFont"').then(() => {
@@ -110,7 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupDropZone('topDropZone', imageUpload, false);
     setupDropZone('middleDropZone', middleBannerUpload, true);
-    setupDropZone('bottomDropZone', bottomBannerUpload, true);
 
     // 2. 우측 캔버스 자체에 드래그 앤 드롭 이벤트 적용 (병행)
     canvas.addEventListener('dragover', (e) => {
@@ -137,14 +128,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 상단 영역 드롭
                 imageUpload.files = droppedFiles;
                 imageUpload.dispatchEvent(new Event('change'));
-            } else if (pos.y > MAX_IMAGE_H && pos.y <= MAX_IMAGE_H + SECTION2_H) {
+            } else if (pos.y > MAX_IMAGE_H) {
                 // 중단 타이틀 배너 드롭
                 middleBannerUpload.files = droppedFiles;
                 middleBannerUpload.dispatchEvent(new Event('change'));
-            } else {
-                // 하단 배너 영역 드롭
-                bottomBannerUpload.files = droppedFiles;
-                bottomBannerUpload.dispatchEvent(new Event('change'));
             }
         }
     });
@@ -219,42 +206,6 @@ document.addEventListener('DOMContentLoaded', () => {
             middleBannerUpload.value = '';
             assets.uploadedMiddleBanner = null;
             removeMiddleBannerBtn.classList.add('hidden');
-            drawCanvasAndSave();
-        });
-    }
-
-    // 하단 배너 업로드 / 삭제
-    const removeBottomBannerBtn = document.getElementById('removeBottomBannerBtn');
-
-    bottomBannerUpload.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = new Image();
-                img.onload = () => {
-                    assets.bottomBanner = img;
-                    if (removeBottomBannerBtn) removeBottomBannerBtn.classList.remove('hidden');
-                    drawCanvasAndSave();
-                };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        } else {
-            assets.bottomBanner = new Image(); // 기본상태
-            assets.bottomBanner.src = 'bottom_banner.png'; // 기본 fallback용
-            if (removeBottomBannerBtn) removeBottomBannerBtn.classList.add('hidden');
-            drawCanvasAndSave();
-        }
-    });
-
-    if (removeBottomBannerBtn) {
-        removeBottomBannerBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            bottomBannerUpload.value = '';
-            assets.bottomBanner = new Image();
-            assets.bottomBanner.src = 'bottom_banner.png';
-            removeBottomBannerBtn.classList.add('hidden');
             drawCanvasAndSave();
         });
     }
@@ -420,19 +371,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // 일정 텍스트 영역 계산: 일정 시작 Y + 상단여백 80 + (줄 수 * 줄간격 80)
         let textEndY = currentY + 80 + (lines.length * 80);
 
-        let bottomBannerHeight = 0;
-        let drawnBottomBannerBaseY = textEndY + 40; // 텍스트에서 40px 여백 후 배너 시작
+        let bottomBannerHeight = 150; // 파란색 텍스트 슬로건 고정 영역
+        let drawnBottomBannerBaseY = textEndY + 40; // 텍스트에서 40px 여백 후 시작
 
-        if (assets.bottomBanner && assets.bottomBanner.complete && assets.bottomBanner.naturalHeight > 0) {
-            // 커스텀 하단 배너
-            const ratio = CANVAS_W / assets.bottomBanner.width;
-            bottomBannerHeight = assets.bottomBanner.height * ratio;
-        } else {
-            // 기본 파란색 텍스트 슬로건 공간
-            bottomBannerHeight = 150;
-        }
-
-        // 전체 캔버스 높이는 배너 끝 높이에 딱 맞춤 (최소 1400 등의 하드코딩 빈 공간 제거)
+        // 전체 캔버스 높이는 슬로건 끝 높이에 딱 맞춤 (최소 1400 등의 하드코딩 제거)
         const CANVAS_H = Math.round(drawnBottomBannerBaseY + bottomBannerHeight);
         canvas.height = CANVAS_H; // 동적 캔버스 리사이즈
 
@@ -509,134 +451,128 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 5. 하단 배너 혹은 텍스트 슬로건 렌더링
-        if (assets.bottomBanner && assets.bottomBanner.complete && assets.bottomBanner.naturalHeight > 0 && assets.bottomBanner.src) {
-            ctx.drawImage(assets.bottomBanner, 0, drawnBottomBannerBaseY, CANVAS_W, bottomBannerHeight);
+        // 5. 하단 기본 슬로건 렌더링
+        ctx.fillStyle = '#1e40af'; // blue-800(당 컬러 톤)과 유사한 색상
+        ctx.fillRect(0, drawnBottomBannerBaseY, CANVAS_W, bottomBannerHeight);
+
+        const sloganText = '생활정치 살림정치 생명정치';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const fontName = assets.fontReady ? 'CardFont' : 'sans-serif';
+        ctx.font = `bold 52px "${fontName}"`;
+
+        // 텍스트를 파란색 영역의 정중앙에 배치
+        ctx.fillText(sloganText, CANVAS_W / 2, drawnBottomBannerBaseY + (bottomBannerHeight / 2));
+    } // <-- 누락되었던 drawCanvas 함수 닫는 괄호 복구
+
+    // ===== 자동 저장(Auto-save) 및 복구 =====
+
+    // 그리기 발생 및 저장 (입력 이벤트 발생 등)
+    function drawCanvasAndSave() {
+        drawCanvas();
+        saveAutoSaveData();
+    }
+
+    function saveAutoSaveData() {
+        // 이미지는 dataURL로 변환하여 문자열로 저장
+        const getBase64 = (img) => {
+            if (!img || !img.src) return null;
+            if (img.src.startsWith('data:')) return img.src; // 이미 Base64인 커스텀파일
+            // 로컬 파일 등은 용량/보안 이슈로 저장 안 함 (수동 복구)
+            return null;
+        };
+
+        const stateObj = {
+            dateInput: dateInput.value,
+            scheduleInput: scheduleInput.value,
+            imgState: imgState,
+            uploadedImgBase64: getBase64(assets.uploadedImg),
+            uploadedMiddleBannerBase64: getBase64(assets.uploadedMiddleBanner)
+        };
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(stateObj));
+    }
+
+    function loadAutoSaveData() {
+        const savedData = localStorage.getItem(AUTOSAVE_KEY);
+        if (savedData) {
+            try {
+                const stateObj = JSON.parse(savedData);
+
+                dateInput.value = stateObj.dateInput || '';
+                scheduleInput.value = stateObj.scheduleInput || '';
+                if (stateObj.imgState) {
+                    imgState = stateObj.imgState;
+                }
+
+                // 이미지 복구 함수 (비동기로 그려줌)
+                const restoreImg = (base64Str, assetKey, btnId) => {
+                    if (base64Str) {
+                        const img = new Image();
+                        img.onload = () => {
+                            assets[assetKey] = img;
+                            const btn = document.getElementById(btnId);
+                            if (btn) btn.classList.remove('hidden');
+                            drawCanvas();
+                        };
+                        img.src = base64Str;
+                    }
+                };
+
+                restoreImg(stateObj.uploadedImgBase64, 'uploadedImg', 'removeImageBtn');
+                restoreImg(stateObj.uploadedMiddleBannerBase64, 'uploadedMiddleBanner', 'removeMiddleBannerBtn');
+
+                // 텍스트만 있고 그림이 완전히 없는 경우 비동기 이미지가 불리지 않아 캔버스가 렌더링되지 않으므로 강제실행
+                if (!stateObj.uploadedImgBase64 && !stateObj.uploadedMiddleBannerBase64) {
+                    drawCanvas();
+                }
+
+            } catch (e) { console.error("Auto-save load failed:", e); }
         } else {
-            // 배너가 따로 없으면 요청하신 파란색 배경+흰색 텍스트의 슬로건 디자인을 렌더링합니다.
-            bottomBannerHeight = 150;
-            ctx.fillStyle = '#1e40af'; // blue-800(당 컬러 톤)과 유사한 색상
-            ctx.fillRect(0, drawnBottomBannerBaseY, CANVAS_W, bottomBannerHeight);
-
-            const sloganText = '생활정치 살림정치 생명정치';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            const fontName = assets.fontReady ? 'CardFont' : 'sans-serif';
-            ctx.font = `bold 52px "${fontName}"`;
-
-            // 텍스트를 파란색 영역의 정중앙에 배치
-            ctx.fillText(sloganText, CANVAS_W / 2, drawnBottomBannerBaseY + (bottomBannerHeight / 2));
+            drawCanvas(); // 저장된 데이터가 없으면 그냥 초기 그리기
         }
-        // ===== 자동 저장(Auto-save) 및 복구 =====
+    }
 
-        // 그리기 발생 및 저장 (입력 이벤트 발생 등)
-        function drawCanvasAndSave() {
-            drawCanvas();
-            saveAutoSaveData();
-        }
+    // ===== 보관함(대시보드) 히스토리 기능 =====
 
-        function saveAutoSaveData() {
-            // 이미지는 dataURL로 변환하여 문자열로 저장
-            const getBase64 = (img) => {
-                if (!img || !img.src) return null;
-                if (img.src.startsWith('data:')) return img.src; // 이미 Base64인 커스텀파일
-                // 로컬 파일 등은 용량/보안 이슈로 저장 안 함 (수동 복구)
-                return null;
-            };
+    function saveToHistoryDashboard() {
+        // 현재 상태를 히스토리용 오브젝트로 만들기
+        const historyData = localStorage.getItem(HISTORY_KEY);
+        let historyArray = historyData ? JSON.parse(historyData) : [];
 
-            const stateObj = {
-                dateInput: dateInput.value,
-                scheduleInput: scheduleInput.value,
-                imgState: imgState,
-                uploadedImgBase64: getBase64(assets.uploadedImg),
-                uploadedMiddleBannerBase64: getBase64(assets.uploadedMiddleBanner),
-                bottomBannerBase64: getBase64(assets.bottomBanner)
-            };
-            localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(stateObj));
+        // 너무 크지 않도록 썸네일은 0.3 비율 등 해상도를 줄여 저장 가능하지만, 단순 구현을 위해 그대로 활용
+        const stateObj = {
+            id: new Date().getTime(),
+            date: new Date().toLocaleDateString('ko-KR') + ' ' + new Date().toLocaleTimeString('ko-KR'),
+            previewDataUrl: canvas.toDataURL('image/jpeg', 0.5), // 용량 절약을 위해 썸네일 JPEG 변환 
+            autosaveState: localStorage.getItem(AUTOSAVE_KEY) // 복구 가능한 순수 상태 통째 저장
+        };
+
+        // 최신 내용이 0번 인덱스에 오도록 추가, 최대 15개 유지
+        historyArray.unshift(stateObj);
+        if (historyArray.length > 15) {
+            historyArray.pop();
         }
 
-        function loadAutoSaveData() {
-            const savedData = localStorage.getItem(AUTOSAVE_KEY);
-            if (savedData) {
-                try {
-                    const stateObj = JSON.parse(savedData);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(historyArray));
+    }
 
-                    dateInput.value = stateObj.dateInput || '';
-                    scheduleInput.value = stateObj.scheduleInput || '';
-                    if (stateObj.imgState) {
-                        imgState = stateObj.imgState;
-                    }
+    function renderHistoryList() {
+        historyListContainer.innerHTML = '';
+        const historyData = localStorage.getItem(HISTORY_KEY);
+        let historyArray = historyData ? JSON.parse(historyData) : [];
 
-                    // 이미지 복구 함수 (비동기로 그려줌)
-                    const restoreImg = (base64Str, assetKey, btnId) => {
-                        if (base64Str) {
-                            const img = new Image();
-                            img.onload = () => {
-                                assets[assetKey] = img;
-                                const btn = document.getElementById(btnId);
-                                if (btn) btn.classList.remove('hidden');
-                                drawCanvas();
-                            };
-                            img.src = base64Str;
-                        }
-                    };
+        if (historyArray.length === 0) {
+            emptyHistoryMsg.classList.remove('hidden');
+        } else {
+            emptyHistoryMsg.classList.add('hidden');
 
-                    restoreImg(stateObj.uploadedImgBase64, 'uploadedImg', 'removeImageBtn');
-                    restoreImg(stateObj.uploadedMiddleBannerBase64, 'uploadedMiddleBanner', 'removeMiddleBannerBtn');
+            historyArray.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = "bg-white border text-center border-gray-100 rounded-[1.5rem] shadow-sm hover:shadow-lg transition-shadow overflow-hidden flex flex-col";
 
-                    if (stateObj.bottomBannerBase64 && assets.bottomBanner.src !== stateObj.bottomBannerBase64) {
-                        restoreImg(stateObj.bottomBannerBase64, 'bottomBanner', 'removeBottomBannerBtn');
-                    } else {
-                        drawCanvas();
-                    }
-
-                } catch (e) { console.error("Auto-save load failed:", e); }
-            } else {
-                drawCanvas(); // 저장된 데이터가 없으면 그냥 초기 그리기
-            }
-        }
-
-        // ===== 보관함(대시보드) 히스토리 기능 =====
-
-        function saveToHistoryDashboard() {
-            // 현재 상태를 히스토리용 오브젝트로 만들기
-            const historyData = localStorage.getItem(HISTORY_KEY);
-            let historyArray = historyData ? JSON.parse(historyData) : [];
-
-            // 너무 크지 않도록 썸네일은 0.3 비율 등 해상도를 줄여 저장 가능하지만, 단순 구현을 위해 그대로 활용
-            const stateObj = {
-                id: new Date().getTime(),
-                date: new Date().toLocaleDateString('ko-KR') + ' ' + new Date().toLocaleTimeString('ko-KR'),
-                previewDataUrl: canvas.toDataURL('image/jpeg', 0.5), // 용량 절약을 위해 썸네일 JPEG 변환 
-                autosaveState: localStorage.getItem(AUTOSAVE_KEY) // 복구 가능한 순수 상태 통째 저장
-            };
-
-            // 최신 내용이 0번 인덱스에 오도록 추가, 최대 15개 유지
-            historyArray.unshift(stateObj);
-            if (historyArray.length > 15) {
-                historyArray.pop();
-            }
-
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(historyArray));
-        }
-
-        function renderHistoryList() {
-            historyListContainer.innerHTML = '';
-            const historyData = localStorage.getItem(HISTORY_KEY);
-            let historyArray = historyData ? JSON.parse(historyData) : [];
-
-            if (historyArray.length === 0) {
-                emptyHistoryMsg.classList.remove('hidden');
-            } else {
-                emptyHistoryMsg.classList.add('hidden');
-
-                historyArray.forEach((item, index) => {
-                    const card = document.createElement('div');
-                    card.className = "bg-white border text-center border-gray-100 rounded-[1.5rem] shadow-sm hover:shadow-lg transition-shadow overflow-hidden flex flex-col";
-
-                    card.innerHTML = `
+                card.innerHTML = `
                     <div class="h-48 bg-gray-100 overflow-hidden flex justify-center items-center w-full">
                         <img src="${item.previewDataUrl}" class="h-full object-contain" alt="thumbnail">
                     </div>
@@ -647,67 +583,67 @@ document.addEventListener('DOMContentLoaded', () => {
                         </button>
                     </div>
                 `;
-                    historyListContainer.appendChild(card);
-                });
-            }
-        }
-
-        // 전역에서 접근 가능하도록 window 객체에 바인딩
-        window.restoreHistoryItem = (index) => {
-            const historyData = localStorage.getItem(HISTORY_KEY);
-            let historyArray = historyData ? JSON.parse(historyData) : [];
-            if (historyArray[index] && historyArray[index].autosaveState) {
-                // localStorage의 오토세이브 키를 덮어씌움
-                localStorage.setItem(AUTOSAVE_KEY, historyArray[index].autosaveState);
-                // 덮어씌운 데이터를 기반으로 리로드 진행
-                loadAutoSaveData();
-                // 화면 닫기
-                dashboardModal.classList.add('hidden');
-            }
-        };
-
-        // 모달 토글 이벤트
-        [dashboardBtn, mobileDashboardBtn].forEach(btn => {
-            if (btn) {
-                btn.addEventListener('click', () => {
-                    renderHistoryList();
-                    dashboardModal.classList.remove('hidden');
-                });
-            }
-        });
-
-        if (closeModalBtn) {
-            closeModalBtn.addEventListener('click', () => {
-                dashboardModal.classList.add('hidden');
+                historyListContainer.appendChild(card);
             });
         }
+    }
 
-        // 다운로드 처리 및 히스토리 저장
-        const downloadAction = (e) => {
-            e.preventDefault();
-            try {
-                const imgDataUrl = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.download = `webcard_${new Date().getTime()}.png`;
-                link.href = imgDataUrl;
-                document.body.appendChild(link); // 브라우저 호환성을 위한 요소 추가
-                link.click();
-                document.body.removeChild(link); // 클릭 후 제거
+    // 전역에서 접근 가능하도록 window 객체에 바인딩
+    window.restoreHistoryItem = (index) => {
+        const historyData = localStorage.getItem(HISTORY_KEY);
+        let historyArray = historyData ? JSON.parse(historyData) : [];
+        if (historyArray[index] && historyArray[index].autosaveState) {
+            // localStorage의 오토세이브 키를 덮어씌움
+            localStorage.setItem(AUTOSAVE_KEY, historyArray[index].autosaveState);
+            // 덮어씌운 데이터를 기반으로 리로드 진행
+            loadAutoSaveData();
+            // 화면 닫기
+            dashboardModal.classList.add('hidden');
+        }
+    };
 
-                // 다운로드가 성공적으로 진행되었으면 히스토리(대시보드)에 등록
-                saveAutoSaveData();
-                saveToHistoryDashboard();
-
-            } catch (err) {
-                console.error(err);
-                alert("다운로드 실패: 로컬 파일(file://) 환경에서는 브라우저 보안 정책으로 이미지를 추출할 수 없습니다.\n\n해결 방법: VS Code의 'Live Server' 플러그인 등 로컬 웹 서버 환경에서 html을 실행해 주세요.");
-            }
-        };
-
-        downloadBtn.addEventListener('click', downloadAction);
-
-        const mobileDownloadBtn = document.getElementById('mobileDownloadBtn');
-        if (mobileDownloadBtn) {
-            mobileDownloadBtn.addEventListener('click', downloadAction);
+    // 모달 토글 이벤트
+    [dashboardBtn, mobileDashboardBtn].forEach(btn => {
+        if (btn) {
+            btn.addEventListener('click', () => {
+                renderHistoryList();
+                dashboardModal.classList.remove('hidden');
+            });
         }
     });
+
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            dashboardModal.classList.add('hidden');
+        });
+    }
+
+    // 다운로드 처리 및 히스토리 저장
+    const downloadAction = (e) => {
+        e.preventDefault();
+        try {
+            const imgDataUrl = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `webcard_${new Date().getTime()}.png`;
+            link.href = imgDataUrl;
+            document.body.appendChild(link); // 브라우저 호환성을 위한 요소 추가
+            link.click();
+            document.body.removeChild(link); // 클릭 후 제거
+
+            // 다운로드가 성공적으로 진행되었으면 히스토리(대시보드)에 등록
+            saveAutoSaveData();
+            saveToHistoryDashboard();
+
+        } catch (err) {
+            console.error(err);
+            alert("다운로드 실패: 로컬 파일(file://) 환경에서는 브라우저 보안 정책으로 이미지를 추출할 수 없습니다.\n\n해결 방법: VS Code의 'Live Server' 플러그인 등 로컬 웹 서버 환경에서 html을 실행해 주세요.");
+        }
+    };
+
+    downloadBtn.addEventListener('click', downloadAction);
+
+    const mobileDownloadBtn = document.getElementById('mobileDownloadBtn');
+    if (mobileDownloadBtn) {
+        mobileDownloadBtn.addEventListener('click', downloadAction);
+    }
+});
