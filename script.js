@@ -39,11 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 캔버스 상수 및 이미지 조작 상태
     const CANVAS_W = 1080;
 
-    // 높이 조정: 기존 SECTION2_Y 파트는 700이었으나 상단 이미지를 2/3 수준으로 축소하기 위해 460으로 변경
-    const SECTION2_Y = 460; // 배너 영역 Y 시작점
-    const SECTION2_H = 200; // 배너 높이
-    const SECTION3_Y = SECTION2_Y + SECTION2_H; // 세부 일정 영역 Y (660px)
-    const IMAGE_DRAW_H = SECTION3_Y; // 이미지는 배너 끝나는 곳(660px)까지 그려짐 (배너에 의해 200px는 상단 덮임)
+    // 높이 변수들 (상단 이미지 유무에 따라 유동적으로 변함)
+    const MAX_IMAGE_H = 460;   // 상단 이미지가 있을 때의 높이
+    const SECTION2_H = 200;    // 로고 배너 영역 높이
 
     let imgState = {
         zoom: 1,
@@ -123,13 +121,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const pos = getMousePos(e);
             const droppedFiles = e.dataTransfer.files;
 
-            // 드롭된 위치의 Y 좌표에 따라서 상단/하단 이미지를 결정
-            if (pos.y <= IMAGE_DRAW_H) {
-                // 상단 영역에 드롭 -> 메인 이미지 교체
+            if (assets.uploadedImg !== null && pos.y <= MAX_IMAGE_H) {
+                // 상단 이미지가 활성화 되어있고 상단 영역에 드롭 -> 메인 이미지 교체
                 imageUpload.files = droppedFiles;
                 imageUpload.dispatchEvent(new Event('change'));
             } else {
-                // 하단 영역에 드롭 -> 하단 배너 교체
+                // 상단 이미지가 없거나 하단 영역에 드롭 -> 하단 배너 교체
                 bottomBannerUpload.files = droppedFiles;
                 bottomBannerUpload.dispatchEvent(new Event('change'));
             }
@@ -211,8 +208,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleDragStart(e) {
         if (!assets.uploadedImg) return;
         const pos = getMousePos(e);
-        // 이미지가 그려진 상단 구역(0 ~ IMAGE_DRAW_H)에서만 드래그 허용
-        if (pos.y <= IMAGE_DRAW_H) {
+        // 이미지가 그려진 상단 구역(0 ~ MAX_IMAGE_H)에서만 드래그 허용
+        if (pos.y <= MAX_IMAGE_H) {
             imgState.isDragging = true;
             imgState.startX = pos.x - imgState.panX;
             imgState.startY = pos.y - imgState.panY;
@@ -249,8 +246,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!assets.uploadedImg) return;
         const pos = getMousePos(e);
 
-        // 상단 이미지 구역에서만 줌 동작
-        if (pos.y <= IMAGE_DRAW_H) {
+        // 상단 이미지 구역에서만 줌 동작 활성화
+        if (pos.y <= MAX_IMAGE_H) {
             e.preventDefault();
 
             const zoomSensitivity = 0.05;
@@ -274,44 +271,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ----- 캔버스 그리기 함수 -----
     function drawCanvas() {
-        // 1. 일정 줄 수에 따른 동적 높이 계산
+        // 1. 레이아웃에 따른 동적 높이 및 Y 좌표 시작점 계산
+        // 상단 이미지가 업로드 되었을 경우에만 높이를 가지도록 분기
+        const hasTopImage = assets.uploadedImg !== null;
+        let currentY = 0; // 요소를 그릴 때마다 내려가는 커서 역할
+
+        let imageDrawHeight = 0;
+        if (hasTopImage) {
+            imageDrawHeight = MAX_IMAGE_H;
+            currentY += MAX_IMAGE_H;
+        }
+
+        const bannerStartY = currentY; // 로고(배너)가 그려질 Y
+        currentY += SECTION2_H; // 타이틀 배너 높이만큼 밑으로
+
         const scheduleText = scheduleInput.value || '';
         const lines = scheduleText ? scheduleText.split('\n') : [];
 
-        // 일정 시작(SECTION3_Y) + 여백(80) + (줄 수 * 80 줄간격)
-        let textEndY = SECTION3_Y + 80 + (lines.length * 80);
+        // 일정 텍스트 영역 계산: 일정 시작 Y + 상단여백 80 + (줄 수 * 줄간격 80)
+        let textEndY = currentY + 80 + (lines.length * 80);
 
         let bottomBannerHeight = 0;
         let drawnBottomBannerBaseY = textEndY + 40; // 텍스트에서 40px 여백 후 배너 시작
 
         if (assets.bottomBanner && assets.bottomBanner.complete && assets.bottomBanner.naturalHeight > 0) {
-            // 배너가 있을 경우 폭 1080에 맞춘 높이를 계산
+            // 커스텀 하단 배너
             const ratio = CANVAS_W / assets.bottomBanner.width;
             bottomBannerHeight = assets.bottomBanner.height * ratio;
         } else {
-            // 기존 텍스트 슬로건 공간
+            // 기본 파란색 텍스트 슬로건 공간
             bottomBannerHeight = 150;
         }
 
-        const CANVAS_H = Math.max(1400, drawnBottomBannerBaseY + bottomBannerHeight);
+        // 전체 캔버스 높이는 배너 끝 높이에 딱 맞춤 (최소 1400 등의 하드코딩 빈 공간 제거)
+        const CANVAS_H = Math.round(drawnBottomBannerBaseY + bottomBannerHeight);
         canvas.height = CANVAS_H; // 동적 캔버스 리사이즈
 
-        // 배경 흰색
+        // 전체 배경 흰색 채우기
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-        // 2. 상단 사진 (0 ~ IMAGE_DRAW_H) - object-fit & 사용자 컨트롤
-        if (assets.uploadedImg) {
+        // 2. 상단 사진 그리기 (업로드 된 경우에만)
+        if (hasTopImage) {
             ctx.save();
-            // 클리핑(0~IMAGE_DRAW_H 만 보여지도록)
             ctx.beginPath();
-            ctx.rect(0, 0, CANVAS_W, IMAGE_DRAW_H);
+            ctx.rect(0, 0, CANVAS_W, imageDrawHeight);
             ctx.clip();
 
             const img = assets.uploadedImg;
 
             // 이미지 전체를 감싸도록(cover) 스케일 계산
-            const scale = Math.max(CANVAS_W / img.width, IMAGE_DRAW_H / img.height);
+            const scale = Math.max(CANVAS_W / img.width, imageDrawHeight / img.height);
             const baseW = img.width * scale;
             const baseH = img.height * scale;
 
@@ -320,57 +330,49 @@ document.addEventListener('DOMContentLoaded', () => {
             const destH = baseH * imgState.zoom;
 
             const destX = (CANVAS_W - destW) / 2 + imgState.panX;
-            const destY = (IMAGE_DRAW_H - destH) / 2 + imgState.panY;
+            const destY = (imageDrawHeight - destH) / 2 + imgState.panY;
 
             ctx.drawImage(img, destX, destY, destW, destH);
 
             ctx.restore();
-        } else {
-            // 사진 없을 경우 회색 배경 안내
-            ctx.fillStyle = '#E5E7EB';
-            ctx.fillRect(0, 0, CANVAS_W, IMAGE_DRAW_H);
-            ctx.fillStyle = '#9CA3AF';
-            ctx.font = 'bold 40px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('상단 현장 사진을 업로드 해주세요', CANVAS_W / 2, IMAGE_DRAW_H / 2);
-            ctx.font = '20px sans-serif';
-            ctx.fillText('(마우스 드래그로 이동, 휠로 확대/축소)', CANVAS_W / 2, (IMAGE_DRAW_H / 2) + 50);
         }
 
-        // 3. 중단 배너 및 날짜
+        // 3. 중단 배너 타이틀
         if (assets.banner.complete && assets.banner.naturalHeight !== 0 && assets.banner.src) {
-            ctx.drawImage(assets.banner, 0, SECTION2_Y, CANVAS_W, SECTION2_H);
+            ctx.drawImage(assets.banner, 0, bannerStartY, CANVAS_W, SECTION2_H);
         } else {
-            // 배너 없을 시 파란색 기본 사각형
+            // 배너 이미지 대체용 컬러 사각형
             ctx.fillStyle = '#0033A0';
-            ctx.fillRect(0, SECTION2_Y, CANVAS_W, SECTION2_H);
+            ctx.fillRect(0, bannerStartY, CANVAS_W, SECTION2_H);
         }
 
-        // 날짜 텍스트 (단일 줄)
+        // 날짜 텍스트 
         const dateText = dateInput.value || '';
         if (dateText) {
             const fontName = assets.fontReady ? 'CardFont' : 'sans-serif';
             ctx.fillStyle = '#FFFFFF';
+            // 날짜 텍스트 사이즈 강제 고정
             ctx.font = `bold 60px "${fontName}"`;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(dateText, 80, SECTION2_Y + (SECTION2_H / 2));
+            ctx.fillText(dateText, 80, bannerStartY + (SECTION2_H / 2));
         }
 
-        // 4. 하단 세부 일정 (SECTION3_Y ~ 가변 Ypx)
+        // 4. 하단 세부 일정 (배너 바로 밑부터 가변)
         if (lines.length > 0) {
             const fontName = assets.fontReady ? 'CardFont' : 'sans-serif';
             ctx.fillStyle = '#000000';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
 
-            let currentY = SECTION3_Y + 80;
+            // bannerStartY + SECTION2_H 부터의 여백
+            let scheduleY = bannerStartY + SECTION2_H + 80;
 
             lines.forEach((line) => {
+                // 일정 텍스트 사이즈를 48px로 못박아 고정 (작아지는 문제 개선)
                 ctx.font = `bold 48px "${fontName}"`;
-                ctx.fillText(line, 80, currentY);
-                currentY += 80; // 줄간격
+                ctx.fillText(line, 80, scheduleY);
+                scheduleY += 80; // 줄간격
             });
         }
 
